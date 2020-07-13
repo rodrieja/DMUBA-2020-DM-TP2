@@ -271,7 +271,7 @@ arules::inspect(trans[1:10])
 
 # Buscamos reglas con min_sup=0.005 y min_conf=0.5
 # Además, se limitan la cantidad de ítems (orden) entre 2 y 9
-rules = arules::apriori(trans, parameter=list(target="rule", support=0.01, confidence=0.6, minlen=2))
+rules = arules::apriori(trans, parameter=list(target="rule", support=0.01, confidence=0.6, minlen=2, maxlen=15))
 print(rules)
 
 arules::inspect(sort(rules, by="lift", decreasing = TRUE)[1:20])
@@ -292,9 +292,17 @@ arules::inspect(sort(lhs_hashtag, by="lift", decreasing = TRUE)[1:20])
 # set of 0 rules
 # muchos hashtags no parecen ser una tendencia
 
-lhs_hashtag = subset(rules, subset = lhs %in% "n_hashtags=varios")
+lhs_hashtag = subset(rules, subset = lhs %pin% "n_hashtags=" & rhs %in% "retweet_retweet_count=muchos")
 print(lhs_hashtag)
+arules::inspect(sort(lhs_hashtag, by="lift", decreasing = TRUE))
 arules::inspect(sort(lhs_hashtag, by="lift", decreasing = TRUE)[1:20])
+
+
+lhs_muchisimos = subset(rules, subset = rhs %in% "retweet_retweet_count=muchisimos")
+print(lhs_muchisimos)
+arules::inspect(sort(lhs_muchisimos, by="lift", decreasing = TRUE))
+arules::inspect(sort(lhs_muchisimos, by="lift", decreasing = TRUE)[1:20])
+
 
 
 
