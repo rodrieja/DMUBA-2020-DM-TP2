@@ -275,7 +275,7 @@ rules = arules::apriori(trans, parameter=list(target="rule", support=0.01, confi
 print(rules)
 
 arules::inspect(sort(rules, by="lift", decreasing = TRUE)[1:20])
-
+arules::itemLabels(rules)
 
 # --------------------- SUBSETS --------------------------
 
@@ -304,9 +304,24 @@ arules::inspect(sort(lhs_muchisimos, by="lift", decreasing = TRUE))
 arules::inspect(sort(lhs_muchisimos, by="lift", decreasing = TRUE)[1:20])
 
 
+# En este subset se encuentran las reglas para rechazar la hipotesis
+# de que la cantidad de hashtags influye en la difusión
+# todos los retweets con mayor cantidad de retweets no tienen hashtags
+rt_viral = subset(rules, subset = rhs %in% "retweet_retweet_count=muchos" & lhs %pin% "n_hashtags=")
+print(rt_viral)
+arules::inspect(sort(rt_viral, by="lift", decreasing = TRUE))
 
+# En este subset se encuentran las reglas para rechazar la hipotesis
+# de que las cuentas verificadas son generadoras de contenido
+# todos los retweets con mayor cantidad de retweets tienen retweet_verified=FALSE
+# sin embargo, se observa en otro subset que si bien no son generadores de contenidos
+# los quotes generados por cuentas verificadas sí se difunden rapidamente.
+rt_viral = subset(rules, subset = rhs %in% "retweet_retweet_count=muchos" & lhs %pin% "retweet_verified=")
+print(rt_viral)
+arules::inspect(sort(rt_viral, by="lift", decreasing = TRUE))
 
-subset = subset(rules, subset = lhs  %in% "hours_until_retweet=hora")
-print(subset)
-arules::inspect(sort(subset, by="lift", decreasing = TRUE)[1:20])
-
+# sin embargo, se observa en otro subset que si bien no son generadores de contenidos
+# los quotes generados por cuentas verificadas sí se difunden rapidamente.
+qt_viral = subset(rules, subset = rhs %in% "quoted_retweet_count=medio" )
+print(qt_viral)
+arules::inspect(sort(qt_viral, by="lift", decreasing = TRUE)[1:100])

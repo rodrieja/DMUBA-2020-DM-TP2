@@ -88,10 +88,24 @@ df_tuples
 # reglas de asociación
 trans <- as(split(df_tuples$item, df_tuples$user_id), "transactions")
 inspect(trans[100])
-rules = apriori(trans, parameter=list(target="rule", support=0.001, confidence=0.5))
+rules = apriori(trans, parameter=list(target="maximally frequent itemsets", support=0.001, confidence=0.5))
 print(rules)
 inspect(sort(rules, by="lift", decreasing = TRUE)[1:20])
 inspect(head(rules, 20))
+
+arules::inspect(rules)
+
+
+arules::inspect(sort(rules, by="support", decreasing = TRUE)[1:20])
+
+
+mfi = apriori(trans, parameter=list(target="maximally frequent itemsets", support=0.001, confidence=0.5))
+arules::inspect(sort(mfi, by="support", decreasing = TRUE)[1:20])
+
+rules = apriori(trans, parameter=list(target="rules", support=0.001, confidence=0.5))
+arules::inspect(sort(rules, by="lift", decreasing = TRUE)[1:20])
+
+rules["lhs"]
 
 
 ### ----- Tratamiento de Textos ------------
@@ -130,7 +144,7 @@ df_text[c("user_id", "item")]
 # reglas
 trans <- as(split(df_text$item, df_text$user_id), "transactions")
 print(trans)
-rules = apriori(trans, parameter=list(target="rule", support=0.008, confidence=0.2))
+rules = apriori(trans, parameter=list(target="rule", support=0.005, confidence=0.5))
 print(rules)
 View(inspect(sort(rules, by="lift", decreasing = TRUE)[1:100]))
 inspect(rules)
@@ -141,7 +155,7 @@ help(memory.size)
 
 gc()
 
-memory.size(max=FALSE)
+memory.size()
 memory.limit()
 typeof(df_text[c("user_id", "item")])
 
