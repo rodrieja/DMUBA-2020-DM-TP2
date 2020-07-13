@@ -1,9 +1,14 @@
-# Verifico que existan los package requeridos
 install.packages("mongolite")
 install.packages("tm")
 install.packages("mice")
 install.packages("arules")
 install.packages('rlang')
+
+# Save your workspace
+save.image(file = "workspace_r0.RData")
+# Load the workspace again
+load("workspace_r0.RData")
+
 # --------------------------------------------------------------------------------------------
 
 library(mongolite)
@@ -74,6 +79,10 @@ colnames(tb_qt)
 # agrupo dataframes
 tweets = rbind(tb_tw,tb_rt,tb_qt)
 
+rm(tb_qt,tb_rt,tb_tw)
+
+# ----------------------- Variables nuevas ---------------------------------------------------
+
 # creo columna si tiene o no archivos multimedia
 tweets['with_media'] = 'N'
 tweets[!is.na(tweets$media_type),'with_media']='Y'
@@ -88,7 +97,13 @@ plot((tweets$text_used))
 # cantidad de menciones
 tweets['mentions_qty']=lengths(tweets$mentions_user_id)
 
-rm(tb_qt,tb_rt,tb_tw)
+# cantidad de urls
+tweets['hashtags_qty']=lengths(tweets$hashtags)
+
+# cantidad de hashtags
+tweets['urls_qty']=lengths(tweets$urls_url)
+
+
 
 # ----------------------- Discretizacion de numericas ----------------------------------------
 # favorite_count
@@ -103,6 +118,27 @@ hist(log10(tweets$retweet_count))
 tweets['retweet_count'] = discretize(log10(tweets$retweet_count),method = "fixed", breaks = c(-Inf, 1, 2, 3, 4, Inf), labels=c("muy pocos","pocos", "medio", "muchos", "muchisimos"))
 plot((tweets$retweet_count))
 
+# mentions_qty
+table(tweets$mentions_qty)
+hist(tweets$mentions_qty)
+hist(log10(tweets$mentions_qty))
+tweets['mentions_qty'] = discretize(tweets$mentions_qty,method = "fixed", breaks = c(0, 1, 2, 3, 4, Inf),right = F, labels=c("ninguno","uno", "dos", "tres", "cuatro o mas"))
+plot((tweets$mentions_qty))
+
+# hashtags_qty
+table(tweets$hashtags_qty)
+hist(tweets$hashtags_qty)
+hist(log10(tweets$hashtags_qty))
+tweets['hashtags_qty'] = discretize(tweets$hashtags_qty,method = "fixed", breaks = c(0, 1, 2, 4, 7, Inf),right = F, labels=c("ninguno","uno", "dos o tres", "cuatro a 6", "siete o mas"))
+plot((tweets$hashtags_qty))
+
+# urls_qty
+table(tweets$urls_qty)
+hist(tweets$urls_qty)
+hist(log10(tweets$urls_qty))
+tweets['urls_qty'] = discretize(tweets$urls_qty,method = "fixed", breaks = c(0, 1, 2, 3, Inf),right = F, labels=c("ninguno","uno", "dos", "tres o mas"))
+plot((tweets$urls_qty))
+
 # ----------------------- Limpieza de datos --------------------------------------------------
 
 # source
@@ -115,29 +151,37 @@ rm(a)
 
 # ----------------------- Generacion de tablas individuales ----------------------------------
 
+colnames(tweets)
 # status_id | text |  hashtags | source | favorite_count | retweet_count | urls_url | mentions_user_id | 
-# media_type | type | with_media | text_used | mentions_qty
+# media_type | type | with_media | text_used | mentions_qty | hashtags_qty | urls_qty
 
-names_list = c('source','favorite_count','retweet_count','mentions_user_id','media_type','type','with_media','text_used','mentions_qty')
+a=c('source','favorite_count','retweet_count','urls_url', 'mentions_user_id','media_type','type','with_media','text_used','mentions_qty','hashtags_qty','urls_qty')
+b=c('mentions_qty','hashtags_qty','urls_qty')
+names_list = b
 for (p in names_list) {
-  df_aux = tweets[!is.na(tweets[p]),]
-  df_aux = df_aux %>% unnest(!!sym(p))
-  df_aux$item = paste0(p,"=", df_aux[p])
-  df_aux = df_aux[c("status_id", "item")]
-  assign(paste0('tweets_',p),df_aux) # hace p<-df_aux
+  temp = tweets[!is.na(tweets[p]),]
+  temp = temp %>% unnest(!!sym(p))
+  temp = temp %>% mutate("item" = paste0(p,"=",!!sym(p))) 
+  temp = temp[c("status_id", "item")]
+  assign(paste0('tweets_',p),temp) # hace p<-df_aux
 }
 
+rm(df_aux,temp,tweets_favorite_count,tweets_mentions_user_id,tweets_retweet_count,tweets_source,tweets_tuples)
 
-# ----------------------- Tratamiento de Mentions --------------------------------------------
-# exploto mentions en filas
-tweets_mentions = tweets[!is.na(tweets$mentions_user_id),]
-tweets_mentions = tweets_mentions %>% unnest(mentions_user_id)
-
-# se agrega prefijo de tipo de item hashtag:
-tweets_mentions$item = paste0("mention=", tweets_mentions$mentions_user_id)
-tweets_mentions = tweets_mentions[c("status_id", "item")]
-head(tweets_mentions[c('status_id','item')],20)
-
+tweets_favorite_count
+tweets_hashtags
+tweets_media_type
+tweets_mentions_qty
+tweets_mentions_user_id
+tweets_mentions
+tweets_retweet_count
+tweets_source
+tweets_text
+tweets_text_used
+tweets_type
+tweets_with_media
+tweets_hashtags_qty
+tweets_urls_qty
 
 # ----------------------- Tratamiento de Hashtags --------------------------------------------
 # exploto hashtags en filas
@@ -187,10 +231,12 @@ tweets_text$text = str_trim(tweets_text$text)
 tweets_text$text = removeWords(tweets_text$text, stopwords("spanish"))
 # se separa el texto en terminos
 tweets_text$words = tokenizers::tokenize_words(tweets_text$text, simplify = T)
-# se pasa a formato pares: id-trrmino
+# se pasa a formato pares: id-termino
 tweets_text = tweets_text %>% select("status_id", "words")  %>% unnest(words) %>%  distinct()
 # se agrega prefijo de tipo de item
 tweets_text$item = paste0("word=", tweets_text$words)
+# se pasa a formato pares: id-termino
+tweets_text = tweets_text %>% select("status_id", "item")
 
 
 # ----------------------- Generacion de Tuplas (template) ------------------------------------
