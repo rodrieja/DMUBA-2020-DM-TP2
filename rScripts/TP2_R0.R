@@ -3,8 +3,10 @@ install.packages("tm")
 install.packages("mice")
 install.packages("arules")
 install.packages('rlang')
+install.packages('arulesViz')
 
 # Save your workspace
+setwd('D:/Onedrive/03. POSGRADO/Datamining/DM/TP2')
 save.image(file = "workspace_r0.RData")
 # Load the workspace again
 load("workspace_r0.RData")
@@ -20,6 +22,8 @@ library(stringr)
 library(stringi)
 library(tm)
 library(rlang)
+library(arulesViz)
+library(colorspace)
 
 # --------------------- Importacion de colecciones --------------------------------------------
 
@@ -43,8 +47,18 @@ users_quot = usersCollection2$find('{}')
 usersCollection3 = mongo(collection = "users_mongo_covid19_TP2_retweeteados", db = "DMUBA")
 users_ret = usersCollection3$find('{}')
 
+rm(tweetsCollection1, tweetsCollection2, tweetsCollection3)
+rm(usersCollection1, usersCollection2, usersCollection3)
 
-head(tweets_red[tweets_red$is_retweet == TRUE & tweets_red$is_quote == TRUE,'status_url'],1)
+# --------------------- Remuevo duplicados ----------------------------------------------------
+
+print(sum(duplicated(tweets_red$status_id)))
+print(sum(duplicated(tweets_ret$retweet_status_id)))
+print(sum(duplicated(tweets_quot$quoted_status_id)))
+
+tweets_red = tweets_red[!duplicated(tweets_red$status_id),]
+tweets_ret = tweets_ret[!duplicated(tweets_ret$retweet_status_id),]
+tweets_quot = tweets_quot[!duplicated(tweets_quot$quoted_status_id),]
 
 # ----------------------- Preparacion de Dataset Tweets --------------------------------------
 
@@ -78,6 +92,9 @@ colnames(tb_qt)
 
 # agrupo dataframes
 tweets = rbind(tb_tw,tb_rt,tb_qt)
+
+print(sum(duplicated(tweets$status_id)))
+tweets = tweets[!duplicated(tweets$status_id),]
 
 rm(tb_qt,tb_rt,tb_tw)
 
@@ -129,7 +146,7 @@ plot((tweets$mentions_qty))
 table(tweets$hashtags_qty)
 hist(tweets$hashtags_qty)
 hist(log10(tweets$hashtags_qty))
-tweets['hashtags_qty'] = discretize(tweets$hashtags_qty,method = "fixed", breaks = c(0, 1, 2, 4, 7, Inf),right = F, labels=c("ninguno","uno", "dos o tres", "cuatro a 6", "siete o mas"))
+tweets['hashtags_qty'] = discretize(tweets$hashtags_qty,method = "fixed", breaks = c(0, 1, 2, 4, 7, Inf),right = F, labels=c("ninguno","uno", "dos o tres", "cuatro a seis", "siete o mas"))
 plot((tweets$hashtags_qty))
 
 # urls_qty
@@ -139,11 +156,27 @@ hist(log10(tweets$urls_qty))
 tweets['urls_qty'] = discretize(tweets$urls_qty,method = "fixed", breaks = c(0, 1, 2, 3, Inf),right = F, labels=c("ninguno","uno", "dos", "tres o mas"))
 plot((tweets$urls_qty))
 
+# creo campo popularidad
+tweets['popularidad'] = 'baja'
+tweets[tweets$favorite_count=='medio'|
+         tweets$retweet_count=='medio',
+       'popularidad']='media'
+tweets[tweets$favorite_count=='muchisimos'|
+       tweets$favorite_count=='muchos'|
+       tweets$retweet_count=='muchisimos'|
+       tweets$retweet_count=='muchos',
+       'popularidad']='alta'
+
+tweets$popularidad = as.factor(tweets$popularidad)
+str(tweets$popularidad)
+tweets$popularidad
+table(tweets$popularidad)
+
 # ----------------------- Limpieza de datos --------------------------------------------------
 
 # source
 sum(is.na(tweets$source))
-a=data.frame(table(tweets$source)).
+a=data.frame(table(tweets$source))
 tweets$source[tweets$source %in% a[a$Freq<50,1]] = 'other'
 tweets$source[is.na(tweets$source)] = 'other'
 length(unique(tweets$source))
@@ -153,10 +186,10 @@ rm(a)
 
 colnames(tweets)
 # status_id | text |  hashtags | source | favorite_count | retweet_count | urls_url | mentions_user_id | 
-# media_type | type | with_media | text_used | mentions_qty | hashtags_qty | urls_qty
+# media_type | type | with_media | text_used | mentions_qty | hashtags_qty | urls_qty | popularidad
 
-a=c('source','favorite_count','retweet_count','urls_url', 'mentions_user_id','media_type','type','with_media','text_used','mentions_qty','hashtags_qty','urls_qty')
-b=c('mentions_qty','hashtags_qty','urls_qty')
+a=c('popularidad','source','favorite_count','retweet_count','urls_url', 'mentions_user_id','media_type','type','with_media','text_used','mentions_qty','hashtags_qty','urls_qty')
+b=c('popularidad')
 names_list = b
 for (p in names_list) {
   temp = tweets[!is.na(tweets[p]),]
@@ -166,22 +199,30 @@ for (p in names_list) {
   assign(paste0('tweets_',p),temp) # hace p<-df_aux
 }
 
-rm(df_aux,temp,tweets_favorite_count,tweets_mentions_user_id,tweets_retweet_count,tweets_source,tweets_tuples)
 
+tweets_popularidad
 tweets_favorite_count
-tweets_hashtags
-tweets_media_type
-tweets_mentions_qty
-tweets_mentions_user_id
-tweets_mentions
 tweets_retweet_count
+
+tweets_type
+
+tweets_hashtags
+tweets_hashtags_qty
+
+tweets_media_type
+tweets_with_media
+
+tweets_mentions_user_id
+tweets_mentions_qty
+
+tweets_urls_url
+tweets_urls_qty
+
 tweets_source
+
 tweets_text
 tweets_text_used
-tweets_type
-tweets_with_media
-tweets_hashtags_qty
-tweets_urls_qty
+
 
 # ----------------------- Tratamiento de Hashtags --------------------------------------------
 # exploto hashtags en filas
@@ -258,12 +299,74 @@ df_user_tuples = df_user_tuples %>%
 # ----------------------- Reglas de asociacion (template) ------------------------------------
 
 # armo las transacciones que quiero analizar
-tweets_tuples = rbind(df1, df1)
+tweets_tuples = rbind(df1, df2)
 
 # reglas de asociacion
 trans <- as(split(tweets_tuples$item, tweets_tuples$status_id), "transactions")
-inspect(trans[100])
-rules = apriori(trans, parameter=list(target="rule", support=0.001, confidence=0.5))
-print(rules)
-inspect(sort(rules, by="lift", decreasing = TRUE)[1:20])
-inspect(head(rules, 20))
+arules::inspect(trans[100])
+rules = apriori(trans, parameter=list(target="rule", support=0.007, confidence=0.5,minlen=2,maxlen=2), appearance = )
+arules::inspect(sort(rules, by="lift", decreasing = TRUE))
+
+# ----------------------- Generacion de Reglas ------------------------------------------------
+
+# base de datos 
+#tweets_tuples = rbind(tweets_hashtags,tweets_mentions_user_id, tweets_favorite_count,tweets_retweet_count,tweets_type,tweets_hashtags_qty,tweets_with_media,tweets_mentions_qty,tweets_urls_qty,tweets_source,tweets_text_used)
+
+tweets_tuples = rbind(tweets_popularidad, tweets_text,tweets_hashtags,tweets_mentions_user_id, tweets_type,tweets_hashtags_qty,tweets_with_media,tweets_mentions_qty,tweets_urls_qty,tweets_source,tweets_text_used)
+# genero transacciones
+trans <- as(split(tweets_tuples$item, tweets_tuples$status_id), "transactions")
+
+# inspecciono transacciones
+arules::inspect(trans[1:5])
+
+# items en transacciones
+trans_dim = size(trans)
+summary(trans_dim)
+quantile(trans_dim, probs = seq(0,1,0.1))
+
+# grafico largo de transacciones (cant. de items)
+data.frame(trans_dim) %>%
+  ggplot(aes(x = trans_dim)) +
+  geom_histogram() +
+  labs(title = "Items de las transacciones",
+       x = "Tamaño",
+       y = "Cantidad") +
+  theme_bw() +
+  xlim(5, 130)
+
+# cantidad de transacciones
+dim(trans)[1]
+
+# generación de itemsets
+itemsets = apriori(trans, parameter=list(target="frequent itemset", support=0.001, minlen=2, maxlen=20))
+arules::inspect(sort(itemsets, by="support", decreasing = TRUE)[1:10])
+
+itemsets_filtrado = arules::subset(itemsets, subset = items %in% 'popularidad=alta')
+arules::inspect(sort(itemsets_filtrado, by="support", decreasing = TRUE)[1:10])
+
+# grafico itemsets
+plot(itemsets, method = 'scatterplot',measure=c("support"), control=list(jitter=0,main='Itemsets totales'))
+plot(itemsets_filtrado, method = 'scatterplot',measure=c("support"), control=list(jitter=0,main='Itemsets con items de popularidad alta'))
+
+# generacion de reglas
+rules = apriori(trans, parameter=list(target="rule", support=0.0005, confidence=0.4,minlen=2, maxlen=20))
+arules::inspect(sort(rules, by="lift", decreasing = TRUE)[1:10])
+rules_df = DATAFRAME(rules, separate = TRUE)
+summary(rules)
+head(rules_df)
+
+# filtro de rules
+mask = grepl('popularidad=alta|popularidad=media', rules_df$RHS) 
+rules_filt_df = rules_df[mask,]
+rules_filt_df[order(rules_filt_df$lift),]
+rules_filtrado = rules[mask]
+arules::inspect(sort(rules_filtrado, by="lift", decreasing = TRUE)[1:10])
+
+
+# remuevo redundantes
+rules_filtrado = rules_filtrado[!is.redundant(rules_filtrado)]
+arules::inspect(sort(rules_filtrado, by="lift", decreasing = TRUE)[1:10])
+
+# grafico reglas
+plot(rules_filtrado, method = 'scatterplot')
+plot(rules_filtrado, method = 'grouped')
